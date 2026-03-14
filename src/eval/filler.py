@@ -15,6 +15,14 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
+CONTEXT_LENGTH_LIMIT = 16_000
+
+
+def truncate_context_from_left(context_str: str, limit: int = CONTEXT_LENGTH_LIMIT) -> str:
+    if len(context_str) <= limit:
+        return context_str
+
+    return context_str[-limit:]
 
 
 def complete_middle(prefix, suffix, context_str):
@@ -117,6 +125,7 @@ def evaluate_filler(file_path, answers_path):
                     summarize_prefix_suffix=False,
                     modified_files=modified_files,
                 )
+                context_str = truncate_context_from_left(context_str)
                 # data['context'] = context_str
 
 
