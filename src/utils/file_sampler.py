@@ -1,8 +1,9 @@
 
 import glob
 import random
+from typing import List
 
-def get_random_files(num_files, extension, project_root="."):
+def get_random_files(num_files, extension, project_root=".") -> List[str]:
     """
     Get the contents of N random files with a given extension from the repository.
 

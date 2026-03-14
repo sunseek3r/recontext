@@ -9,7 +9,7 @@ from config import REPO_PATH
 from rag.embeddings import get_embedding_configuration_key, get_embeddings
 from rag.repository import load_code_repository
 
-CHUNK_SIZE = 1200
+CHUNK_SIZE = 500
 CHUNK_OVERLAP = 200
 CHROMA_DIR_PATH = "chroma"
 
