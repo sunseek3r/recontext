@@ -270,7 +270,7 @@ def create_context_for_repo(
         related_files_context = compose_related_files_context(modified_file_examples) or None
 
     prompt_build_started_at = perf_counter()
-    code_samples = random_files_contents + rag_samples + regex_samples + modified_file_examples
+    code_samples = random_files_contents + rag_samples + regex_samples
     code_samples_summary_prompt = None
     if summarize_code_samples and code_samples:
         code_samples_summary_prompt = f"""
