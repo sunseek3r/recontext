@@ -276,7 +276,7 @@ def create_context_for_repo(
         code_samples_summary_prompt = f"""
 Extract key code styles, naming conventions, and other important findings from this code.
 DO NOT describe the logic of it.
-You must be REALLY specific on describing code style in the project, with providing examples.
+You must be REALLY specific on describing code style in the project, with providing examples (examples are mandatory!).
 {"\n".join(code_samples)}
 """
 
