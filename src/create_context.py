@@ -84,7 +84,7 @@ def create_context_for_repo(
 ):
     total_started_at = perf_counter()
     timings: list[tuple[str, float]] = []
-    should_output = not verbose
+    should_output = verbose
 
     repo_path_started_at = perf_counter()
     repo_path = get_repo_path(repo_name)
