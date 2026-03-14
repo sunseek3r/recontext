@@ -65,17 +65,21 @@ def create_context_for_repo(
     print('=' * 50)
     print('=' * 50)
 
-#     random_files_summary = complete_text(f"""
-# Extract key code styles, naming conventions, and other importantn findings from this code.
-# DO NOT describe the logic of it.
-# {"\n".join(files_contents)}
-# """)
+    random_files_summary = complete_text(f"""
+Extract key code styles, naming conventions, and other importantn findings from this code.
+DO NOT describe the logic of it.
+{"\n".join(files_contents)}
+""")
+    print(random_files_summary)
 
     return "\n".join(files_contents)
 
     # ===== 3. ANALYZE PREFIX AND SUFFIX =====
 
     # ===== COMPOSE FINAL COMPLETION PROMPT =====
+    return compose_fim_completion_prompt(
+        language=cfg.
+    )
 
 
 def compose_fim_completion_prompt(
