@@ -7,6 +7,7 @@ import src.prompts.regex_queries as rq
 from src.llm.client import complete_text
 from src.rag.vector_store import similarity_search
 from src.regex_search import regex_search
+from src.utils.context_files import compose_related_files_context, load_modified_file_examples
 from src.utils.file_sampler import get_random_files
 from src.utils.repos import get_repo_path
 import src.config as cfg
@@ -71,10 +72,12 @@ def create_context_for_repo(
     repo_name: str,
     file_prefix: str,
     file_suffix: str,
+    modified_files: list[str] | None = None,
     *,
     use_rag: bool = True,
     use_regex: bool = True,
     use_random_files: bool = True,
+    use_modified_files: bool = True,
     summarize_code_samples: bool = True,
     summarize_prefix_suffix: bool = True,
     verbose: bool = False,
@@ -95,6 +98,8 @@ def create_context_for_repo(
     seen_samples = set()
     regex_samples = []
     random_files_contents = []
+    modified_file_examples = []
+    related_files_context = None
 
     if use_rag:
         rag_stage_started_at = perf_counter()
@@ -244,8 +249,28 @@ def create_context_for_repo(
             print('=' * 50)
             print('=' * 50)
 
+    if use_modified_files and modified_files:
+        modified_files_started_at = perf_counter()
+        modified_file_examples = load_modified_file_examples(
+            repo_path,
+            modified_files,
+            seen_samples,
+        )
+        _record_timing(
+            timings,
+            'modified_files',
+            perf_counter() - modified_files_started_at,
+            enabled=should_output,
+        )
+        if should_output:
+            for file_example in modified_file_examples:
+                print('[modified]')
+                print(file_example)
+                print('=' * 50)
+        related_files_context = compose_related_files_context(modified_file_examples) or None
+
     prompt_build_started_at = perf_counter()
-    code_samples = random_files_contents + rag_samples + regex_samples
+    code_samples = random_files_contents + rag_samples + regex_samples + modified_file_examples
     code_samples_summary_prompt = None
     if summarize_code_samples and code_samples:
         code_samples_summary_prompt = f"""
@@ -325,7 +350,8 @@ You are given the beginning and the end of the file, with some relatively small 
         language=cfg.LANGUAGE,
         codebase_summary=code_samples_summary,
         prefix_suffix_summary=prefix_suffix_summary,
-        examples=regex_samples if use_regex else None
+        related_files=related_files_context,
+        examples=regex_samples or None,
     )
     _record_timing(
         timings,
@@ -349,6 +375,7 @@ def compose_fim_completion_prompt(
     language: str,
     codebase_summary: str | None,
     prefix_suffix_summary: str | None,
+    related_files: str | None,
     examples: List[str] | None,
 ) -> str:
     intro_part = f"""
@@ -372,7 +399,14 @@ Here are some examples of code from the codebase that may help you:
 {'\n\n'.join([] if examples is None else examples)}
 """
 
+    related_files_part = f"""
+Here are code that may be potentially related to the file you are working with:
+{related_files}
+"""
+
     task_description_part = f"""
+=== TASK ===
+
 Your task is to create fill-in-the-middle completion for the given prefix and suffix of the file.
 Your completion must complete the logic of missed piece of code and follow patterns, principles and rules established in the codebase.
 """
@@ -386,6 +420,8 @@ Your completion must complete the logic of missed piece of code and follow patte
 {'' if prefix_suffix_summary is None else prefix_suffix_summary_part }
 
 {'' if examples is None else examples_part}
+
+{'' if related_files is None else related_files_part}
 
 {task_description_part}
 """

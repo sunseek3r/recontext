@@ -98,9 +98,19 @@ def evaluate_filler(file_path, answers_path):
 
                 file_prefix = data['prefix']
                 file_suffix = data['suffix']
+                modified_files = data.get('modified')
 
 
-                context_str = create_context_for_repo(repo_name, file_prefix, file_suffix, use_rag=False, summarize_code_samples=False, summarize_prefix_suffix=False)
+                context_str = create_context_for_repo(
+                    repo_name,
+                    file_prefix,
+                    file_suffix,
+                    use_rag=False,
+                    use_modified_files=True,
+                    summarize_code_samples=False,
+                    summarize_prefix_suffix=False,
+                    modified_files=modified_files,
+                )
                 # data['context'] = context_str
 
 
