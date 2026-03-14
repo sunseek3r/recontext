@@ -10,148 +10,155 @@ from src.utils.repos import get_repo_path
 import src.config as cfg
 
 
+def _print_stage_break() -> None:
+    print('=' * 50)
+    print('=' * 50)
+    print('=' * 50)
+    print('\n\n\n\n\n\n')
+
+
 def create_context_for_repo(
     repo_name: str,
     file_prefix: str,
     file_suffix: str,
+    *,
+    use_rag: bool = True,
+    use_regex: bool = True,
+    use_random_files: bool = True,
+    summarize_code_samples: bool = True,
+    summarize_prefix_suffix: bool = True,
 ):
-    # ===== 1. EXTRACTING CODE EXAMPLES VIA RAG =====
     repo_path = get_repo_path(repo_name)
-
-    get_rag_query_functions = [
-        { 
-            'f': ragq.get_rag_query_class_example,
-            'samples_cnt': 1,
-            'id': 'class-example',
-        },
-        {
-            'f': ragq.get_rag_query_function_example,
-            'samples_cnt': 1,
-            'id': 'function-example',
-        },
-        {
-            'f': ragq.get_rag_query_naming_convention_example,
-            'samples_cnt': 1,
-            'id': 'naming-convention-example',
-        },
-        {
-            'f': ragq.get_rag_query_comment_example,
-            'samples_cnt': 1,
-            'id': 'comment-example',
-        },
-        {
-            'f': ragq.get_rag_query_env_var_access_example,
-            'samples_cnt': 1,
-            'id': 'env-var-access-example',
-        }
-    ]
-
     rag_samples = []
     seen_samples = set()
-    for entry in get_rag_query_functions:
-        samples = similarity_search(
-            query=entry['f'](),
-            repo_path=repo_path,
-            limit=entry['samples_cnt']
-        )
-
-        for sample in samples:
-            if sample.page_content in seen_samples:
-                continue
-
-            seen_samples.add(sample.page_content)
-            print('[' + entry['id'] + ']')
-            print(sample.page_content)
-            rag_samples.append(sample.page_content)
-        print('=' * 50)
-
-    print('=' * 50)
-    print('=' * 50)
-    print('=' * 50)
-    print('\n\n\n\n\n\n')
-
-
-    # ===== 2. EXTRACTING CODE EXAMPLES VIA REGEX SEARCH =====
-    get_regex_functions = [
-        {
-            'f': rq.get_regex_query_class_example,
-            'samples_cnt': 1,
-            'id': 'regex-class-example',
-        },
-        {
-            'f': rq.get_regex_query_function_example,
-            'samples_cnt': 1,
-            'id': 'regex-function-example',
-        },
-        {
-            'f': rq.get_regex_query_naming_convention_example,
-            'samples_cnt': 1,
-            'id': 'regex-naming-convention-example',
-        },
-        {
-            'f': rq.get_regex_query_comment_example,
-            'samples_cnt': 1,
-            'id': 'regex-comment-example',
-        },
-        {
-            'f': rq.get_regex_query_env_var_access_example,
-            'samples_cnt': 1,
-            'id': 'regex-env-var-access-example',
-        },
-    ]
-
     regex_samples = []
-    for entry in get_regex_functions:
-        samples = regex_search(
-            pattern=entry['f'](),
-            repo_path=repo_path,
-            limit=entry['samples_cnt']
-        )
-        for sample in samples:
-            if sample.page_content in seen_samples:
-                continue
+    random_files_contents = []
 
-            seen_samples.add(sample.page_content)
-            print('[' + entry['id'] + ']')
-            print(sample.page_content)
-            regex_samples.append(sample.page_content)
+    if use_rag:
+        get_rag_query_functions = [
+            {
+                'f': ragq.get_rag_query_class_example,
+                'samples_cnt': 1,
+                'id': 'class-example',
+            },
+            {
+                'f': ragq.get_rag_query_function_example,
+                'samples_cnt': 1,
+                'id': 'function-example',
+            },
+            {
+                'f': ragq.get_rag_query_naming_convention_example,
+                'samples_cnt': 1,
+                'id': 'naming-convention-example',
+            },
+            {
+                'f': ragq.get_rag_query_comment_example,
+                'samples_cnt': 1,
+                'id': 'comment-example',
+            },
+            {
+                'f': ragq.get_rag_query_env_var_access_example,
+                'samples_cnt': 1,
+                'id': 'env-var-access-example',
+            }
+        ]
+
+        for entry in get_rag_query_functions:
+            samples = similarity_search(
+                query=entry['f'](),
+                repo_path=repo_path,
+                limit=entry['samples_cnt']
+            )
+
+            for sample in samples:
+                if sample.page_content in seen_samples:
+                    continue
+
+                seen_samples.add(sample.page_content)
+                print('[' + entry['id'] + ']')
+                print(sample.page_content)
+                rag_samples.append(sample.page_content)
+            print('=' * 50)
+
+        _print_stage_break()
+
+    if use_regex:
+        get_regex_functions = [
+            {
+                'f': rq.get_regex_query_class_example,
+                'samples_cnt': 1,
+                'id': 'regex-class-example',
+            },
+            {
+                'f': rq.get_regex_query_function_example,
+                'samples_cnt': 1,
+                'id': 'regex-function-example',
+            },
+            {
+                'f': rq.get_regex_query_naming_convention_example,
+                'samples_cnt': 1,
+                'id': 'regex-naming-convention-example',
+            },
+            {
+                'f': rq.get_regex_query_comment_example,
+                'samples_cnt': 1,
+                'id': 'regex-comment-example',
+            },
+            {
+                'f': rq.get_regex_query_env_var_access_example,
+                'samples_cnt': 1,
+                'id': 'regex-env-var-access-example',
+            },
+        ]
+
+        for entry in get_regex_functions:
+            samples = regex_search(
+                pattern=entry['f'](),
+                repo_path=repo_path,
+                limit=entry['samples_cnt']
+            )
+            for sample in samples:
+                if sample.page_content in seen_samples:
+                    continue
+
+                seen_samples.add(sample.page_content)
+                print('[' + entry['id'] + ']')
+                print(sample.page_content)
+                regex_samples.append(sample.page_content)
+            print('=' * 50)
+
+        _print_stage_break()
+
+    if use_random_files:
+        random_files_contents = get_random_files(
+            num_files=3,
+            extension='.py',
+            project_root=repo_path
+        )
+        for file in random_files_contents:
+            print(file)
+            print('\n')
+        print('=' * 50)
+        print('=' * 50)
         print('=' * 50)
 
-    print('=' * 50)
-    print('=' * 50)
-    print('=' * 50)
-    print('\n\n\n\n\n\n')
-
-
-    # ===== 3. GET N RANDOM FILES =====
-    random_files_contents = get_random_files(
-        num_files=3,
-        extension='.py',
-        project_root=repo_path
-    )
-    for file in random_files_contents:
-        print(file)
-        print('\n')
-    print('=' * 50)
-    print('=' * 50)
-    print('=' * 50)
-
-
-    # ===== 4. GET SUMMARY FOR SAMPLES AND RANDOM FILES =====
-    code_samples_summary = complete_text(f"""
+    code_samples_summary = None
+    code_samples = random_files_contents + rag_samples + regex_samples
+    if summarize_code_samples and code_samples:
+        code_samples_summary = complete_text(f"""
 Extract key code styles, naming conventions, and other important findings from this code.
 DO NOT describe the logic of it.
 You must be REALLY specific on describing code style in the project, with providing examples.
-{"\n".join(random_files_contents + rag_samples + regex_samples)}
+{"\n".join(code_samples)}
 """)
-    print(code_samples_summary)
-    print('=' * 50)
-    print('=' * 50)
-    print('=' * 50)
+        print(code_samples_summary)
+        print('=' * 50)
+        print('=' * 50)
+        print('=' * 50)
 
-    # ===== 5. ANALYZE PREFIX AND SUFFIX =====
-
-    prefix_suffix_summary = complete_text(f"""
+    prefix_suffix_summary = None
+    if summarize_prefix_suffix:
+        prefix_suffix_summary = complete_text(f"""
 You are given the beginning and the end of the file, with some relatively small part missing. You have to figure out and explain what is going in this file in details.
 ```
 {file_prefix}
@@ -159,17 +166,16 @@ You are given the beginning and the end of the file, with some relatively small 
 {file_suffix}
 ```
 """)
-    print(prefix_suffix_summary)
-    print('=' * 50)
-    print('=' * 50)
-    print('=' * 50)
+        print(prefix_suffix_summary)
+        print('=' * 50)
+        print('=' * 50)
+        print('=' * 50)
 
-    # ===== 6. COMPOSE FINAL COMPLETION PROMPT =====
     final_context = compose_fim_completion_prompt(
         language=cfg.LANGUAGE,
         codebase_summary=code_samples_summary,
         prefix_suffix_summary=prefix_suffix_summary,
-        examples=regex_samples
+        examples=regex_samples if use_regex else None
     )
     print(final_context)
     return final_context
