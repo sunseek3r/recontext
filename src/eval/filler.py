@@ -9,6 +9,7 @@ import sacrebleu
 from src.create_context import create_context_for_repo
 
 from pathlib import Path
+from tqdm import tqdm
 
 def complete_middle(prefix, suffix, context_str):
     """
@@ -38,6 +39,8 @@ def complete_middle(prefix, suffix, context_str):
     return response.choices[0].text
 
 def calculate_chrf_jsonl(predictions_file: str, references_file: str, output_file: str):
+    sum_chf = 0
+    total = 0
     with open(predictions_file, 'r') as f_preds, \
         open(references_file, 'r') as f_refs, \
         open(output_file, 'w') as f_out:
@@ -53,6 +56,8 @@ def calculate_chrf_jsonl(predictions_file: str, references_file: str, output_fil
 
                 chrf_metric = sacrebleu.sentence_chrf(comp_p, [comp_r])
                 score = chrf_metric.score
+                sum_chf += score
+                total += 1
 
                 print(f"Line: {line_num} | score: {score:.2f}")
 
@@ -68,6 +73,8 @@ def calculate_chrf_jsonl(predictions_file: str, references_file: str, output_fil
             except Exception as e:
                 print(f"Line {line_num:03d} | Error: {e}")
 
+    print(f"Final Score: {sum_chf / total}")
+
 
 def evaluate_filler(file_path, answers_path):
     input_path = Path(file_path).name
@@ -78,10 +85,13 @@ def evaluate_filler(file_path, answers_path):
     res_path = f'results/{input_path}'
     Path(res_path).parent.mkdir(parents=True, exist_ok=True)
 
+    eval_res_path = f'eval_results/{input_path}'
+    Path(eval_res_path).parent.mkdir(parents=True, exist_ok=True)
+
     with open(file_path, 'r') as input_file, \
         open(f'{out_path}', 'w') as pred_file, \
             open(f'{res_path}', 'w') as res_file:
-            for line in input_file:
+            for line in tqdm(input_file):
                 data = json.loads(line)
 
                 repo_name = data['repo'].replace('/', '__') + '-' + data['revision']
@@ -90,19 +100,20 @@ def evaluate_filler(file_path, answers_path):
                 file_suffix = data['suffix']
 
 
-                context_str = create_context_for_repo(repo_name, file_prefix, file_suffix)
-                data['context'] = context_str
+                context_str = create_context_for_repo(repo_name, file_prefix, file_suffix, use_rag=False, summarize_code_samples=False, summarize_prefix_suffix=False)
+                # data['context'] = context_str
 
 
                 middle = complete_middle(file_prefix, file_suffix, context_str)
 
                 pred_file.write(json.dumps({'middle': middle}) + '\n')
-                res_file.write(json.dumps(data) + '\n')
+                res_file.write(json.dumps({"context": context_str}) + '\n')
     
 
     calculate_chrf_jsonl(
-        predictions_file=f'predictions/{file_path}',
-        references_file=answers_path
+        predictions_file=out_path,
+        references_file=answers_path,
+        output_file=eval_res_path
     )
 
     
