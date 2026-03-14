@@ -1,3 +1,4 @@
+from concurrent.futures import Future, ThreadPoolExecutor
 from typing import List
 import src.prompts.rag_queries as ragq
 import src.prompts.regex_queries as rq
@@ -15,6 +16,13 @@ def _print_stage_break() -> None:
     print('=' * 50)
     print('=' * 50)
     print('\n\n\n\n\n\n')
+
+
+def _print_summary(summary: str) -> None:
+    print(summary)
+    print('=' * 50)
+    print('=' * 50)
+    print('=' * 50)
 
 
 def create_context_for_repo(
@@ -142,34 +150,51 @@ def create_context_for_repo(
         print('=' * 50)
         print('=' * 50)
 
-    code_samples_summary = None
     code_samples = random_files_contents + rag_samples + regex_samples
+    code_samples_summary_prompt = None
     if summarize_code_samples and code_samples:
-        code_samples_summary = complete_text(f"""
+        code_samples_summary_prompt = f"""
 Extract key code styles, naming conventions, and other important findings from this code.
 DO NOT describe the logic of it.
 You must be REALLY specific on describing code style in the project, with providing examples.
 {"\n".join(code_samples)}
-""")
-        print(code_samples_summary)
-        print('=' * 50)
-        print('=' * 50)
-        print('=' * 50)
+"""
 
-    prefix_suffix_summary = None
+    prefix_suffix_summary_prompt = None
     if summarize_prefix_suffix:
-        prefix_suffix_summary = complete_text(f"""
+        prefix_suffix_summary_prompt = f"""
 You are given the beginning and the end of the file, with some relatively small part missing. You have to figure out and explain what is going in this file in details.
 ```
 {file_prefix}
 ...
 {file_suffix}
 ```
-""")
-        print(prefix_suffix_summary)
-        print('=' * 50)
-        print('=' * 50)
-        print('=' * 50)
+"""
+
+    code_samples_summary = None
+    prefix_suffix_summary = None
+
+    futures: dict[str, Future[str]] = {}
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        if code_samples_summary_prompt is not None:
+            futures['code_samples_summary'] = executor.submit(
+                complete_text,
+                code_samples_summary_prompt,
+            )
+
+        if prefix_suffix_summary_prompt is not None:
+            futures['prefix_suffix_summary'] = executor.submit(
+                complete_text,
+                prefix_suffix_summary_prompt,
+            )
+
+        if 'code_samples_summary' in futures:
+            code_samples_summary = futures['code_samples_summary'].result()
+            _print_summary(code_samples_summary)
+
+        if 'prefix_suffix_summary' in futures:
+            prefix_suffix_summary = futures['prefix_suffix_summary'].result()
+            _print_summary(prefix_suffix_summary)
 
     final_context = compose_fim_completion_prompt(
         language=cfg.LANGUAGE,
