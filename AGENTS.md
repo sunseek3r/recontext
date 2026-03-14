@@ -42,3 +42,60 @@ It is a Hackathon PoC Project. Here is a short version of task statements:
 
 # Implementation
 We are currently working on implementation that consists of several modules:
+
+## Useful module methods
+
+When working with the current PoC, these are the main public entry points exposed by the `src/rag` and `src/llm` packages.
+
+### `src/rag`
+
+`src/rag/__init__.py` exports:
+
+- `similarity_search(query: str, repo_path: str | Path = REPO_PATH, limit: int = 4) -> list[Document]`
+
+Behavior:
+- Builds or reuses a persisted Chroma vector store for the target repository.
+- Loads indexable repository files, chunks them, embeds them, and performs semantic search.
+- Returns LangChain `Document` objects with `page_content`, `metadata["source"]`, and `metadata["relative_path"]`.
+
+Operational details:
+- The default repository path is `src/config.py::REPO_PATH`.
+- The cache location is `chroma/<repo-name>/<embedding-config-hash>`.
+- Supported embedding presets today are `openai` and `self-hosted-openai`.
+
+Environment relevant to `similarity_search`:
+- `EMBEDDINGS_API_KEY` or `OPENAI_API_KEY`
+- `EMBEDDING_MODEL_PRESET=self-hosted-openai` requires `EMBEDDINGS_BASE_URL`
+- Optional: `EMBEDDINGS_MODEL`, `EMBEDDINGS_ORGANIZATION`, `EMBEDDINGS_DIMENSIONS`, `RAG_QUERY`
+
+Example:
+
+```python
+from rag import similarity_search
+
+results = similarity_search("authentication logic", limit=4)
+```
+
+### `src/llm`
+
+`src/llm/__init__.py` exports:
+
+- `complete_text(prompt: str) -> str`
+
+Behavior:
+- Creates a cached OpenAI-compatible client.
+- Sends the prompt as a single user chat message.
+- Returns the first completion content and raises if it is empty.
+
+Environment relevant to `complete_text`:
+- `LLM_BASE_URL`
+- `LLM_MODEL`
+- Optional: `LLM_API_KEY` or `OPENAI_API_KEY`
+
+Example:
+
+```python
+from llm import complete_text
+
+result = complete_text("Write a short hello-world function in Python.")
+```
