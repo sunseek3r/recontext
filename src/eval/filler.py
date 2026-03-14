@@ -11,12 +11,18 @@ from src.create_context import create_context_for_repo
 from pathlib import Path
 from tqdm import tqdm
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
 def complete_middle(prefix, suffix, context_str):
     """
     Placeholder for a call to an LLM to complete the middle.
     """
     # For now, return a fixed string.
-    MODEL_ID = "./models/Qwen3-Coder-30B-A3B-Instruct-UD-Q4_K_XL.gguf"
+    MODEL_ID = os.getenv("LLM_MODEL")
 
     client = OpenAI(base_url="http://localhost:8000/v1", api_key="EMPTY")
 
@@ -107,7 +113,7 @@ def evaluate_filler(file_path, answers_path):
                     file_suffix,
                     use_rag=False,
                     use_modified_files=True,
-                    summarize_code_samples=False,
+                    summarize_code_samples=True,
                     summarize_prefix_suffix=False,
                     modified_files=modified_files,
                 )
@@ -130,4 +136,4 @@ def evaluate_filler(file_path, answers_path):
     
 
 if __name__ == '__main__':
-    evaluate_filler('data/python-practice.jsonl', 'data/answers-python-practice.jsonl')
+    evaluate_filler(f'data/python-{os.getenv("STAGE")}.jsonl', f'data/answers-python-{os.getenv("STAGE")}.jsonl')
