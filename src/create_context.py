@@ -14,14 +14,20 @@ import src.config as cfg
 T = TypeVar('T')
 
 
-def _print_stage_break() -> None:
+def _print_stage_break(*, enabled: bool) -> None:
+    if not enabled:
+        return
+
     print('=' * 50)
     print('=' * 50)
     print('=' * 50)
     print('\n\n\n\n\n\n')
 
 
-def _print_summary(summary: str) -> None:
+def _print_summary(summary: str, *, enabled: bool) -> None:
+    if not enabled:
+        return
+
     print(summary)
     print('=' * 50)
     print('=' * 50)
@@ -32,12 +38,20 @@ def _record_timing(
     timings: list[tuple[str, float]],
     step_name: str,
     duration_seconds: float,
+    *,
+    enabled: bool,
 ) -> None:
     timings.append((step_name, duration_seconds))
+    if not enabled:
+        return
+
     print(f'[timing] {step_name}: {duration_seconds:.3f}s')
 
 
-def _print_timing_summary(timings: list[tuple[str, float]]) -> None:
+def _print_timing_summary(timings: list[tuple[str, float]], *, enabled: bool) -> None:
+    if not enabled:
+        return
+
     print('[timing] summary (slowest first):')
     for step_name, duration_seconds in sorted(
         timings,
@@ -63,13 +77,20 @@ def create_context_for_repo(
     use_random_files: bool = True,
     summarize_code_samples: bool = True,
     summarize_prefix_suffix: bool = True,
+    verbose: bool = False,
 ):
     total_started_at = perf_counter()
     timings: list[tuple[str, float]] = []
+    should_output = not verbose
 
     repo_path_started_at = perf_counter()
     repo_path = get_repo_path(repo_name)
-    _record_timing(timings, 'resolve_repo_path', perf_counter() - repo_path_started_at)
+    _record_timing(
+        timings,
+        'resolve_repo_path',
+        perf_counter() - repo_path_started_at,
+        enabled=should_output,
+    )
     rag_samples = []
     seen_samples = set()
     regex_samples = []
@@ -116,6 +137,7 @@ def create_context_for_repo(
                 timings,
                 f"rag:{entry['id']}",
                 perf_counter() - query_started_at,
+                enabled=should_output,
             )
 
             for sample in samples:
@@ -123,13 +145,20 @@ def create_context_for_repo(
                     continue
 
                 seen_samples.add(sample.page_content)
-                print('[' + entry['id'] + ']')
-                print(sample.page_content)
+                if should_output:
+                    print('[' + entry['id'] + ']')
+                    print(sample.page_content)
                 rag_samples.append(sample.page_content)
-            print('=' * 50)
+            if should_output:
+                print('=' * 50)
 
-        _record_timing(timings, 'rag_total', perf_counter() - rag_stage_started_at)
-        _print_stage_break()
+        _record_timing(
+            timings,
+            'rag_total',
+            perf_counter() - rag_stage_started_at,
+            enabled=should_output,
+        )
+        _print_stage_break(enabled=should_output)
 
     if use_regex:
         regex_stage_started_at = perf_counter()
@@ -172,19 +201,27 @@ def create_context_for_repo(
                 timings,
                 f"regex:{entry['id']}",
                 perf_counter() - pattern_started_at,
+                enabled=should_output,
             )
             for sample in samples:
                 if sample.page_content in seen_samples:
                     continue
 
                 seen_samples.add(sample.page_content)
-                print('[' + entry['id'] + ']')
-                print(sample.page_content)
+                if should_output:
+                    print('[' + entry['id'] + ']')
+                    print(sample.page_content)
                 regex_samples.append(sample.page_content)
-            print('=' * 50)
+            if should_output:
+                print('=' * 50)
 
-        _record_timing(timings, 'regex_total', perf_counter() - regex_stage_started_at)
-        _print_stage_break()
+        _record_timing(
+            timings,
+            'regex_total',
+            perf_counter() - regex_stage_started_at,
+            enabled=should_output,
+        )
+        _print_stage_break(enabled=should_output)
 
     if use_random_files:
         random_files_started_at = perf_counter()
@@ -197,13 +234,15 @@ def create_context_for_repo(
             timings,
             'random_files',
             perf_counter() - random_files_started_at,
+            enabled=should_output,
         )
-        for file in random_files_contents:
-            print(file)
-            print('\n')
-        print('=' * 50)
-        print('=' * 50)
-        print('=' * 50)
+        if should_output:
+            for file in random_files_contents:
+                print(file)
+                print('\n')
+            print('=' * 50)
+            print('=' * 50)
+            print('=' * 50)
 
     prompt_build_started_at = perf_counter()
     code_samples = random_files_contents + rag_samples + regex_samples
@@ -230,6 +269,7 @@ You are given the beginning and the end of the file, with some relatively small 
         timings,
         'build_summary_prompts',
         perf_counter() - prompt_build_started_at,
+        enabled=should_output,
     )
 
     code_samples_summary = None
@@ -256,17 +296,28 @@ You are given the beginning and the end of the file, with some relatively small 
 
         if 'code_samples_summary' in futures:
             code_samples_summary, step_name, duration_seconds = futures['code_samples_summary'].result()
-            _record_timing(timings, step_name, duration_seconds)
-            _print_summary(code_samples_summary)
+            _record_timing(
+                timings,
+                step_name,
+                duration_seconds,
+                enabled=should_output,
+            )
+            _print_summary(code_samples_summary, enabled=should_output)
 
         if 'prefix_suffix_summary' in futures:
             prefix_suffix_summary, step_name, duration_seconds = futures['prefix_suffix_summary'].result()
-            _record_timing(timings, step_name, duration_seconds)
-            _print_summary(prefix_suffix_summary)
+            _record_timing(
+                timings,
+                step_name,
+                duration_seconds,
+                enabled=should_output,
+            )
+            _print_summary(prefix_suffix_summary, enabled=should_output)
     _record_timing(
         timings,
         'llm_total_wall_time',
         perf_counter() - llm_stage_started_at,
+        enabled=should_output,
     )
 
     final_context_started_at = perf_counter()
@@ -280,14 +331,17 @@ You are given the beginning and the end of the file, with some relatively small 
         timings,
         'compose_final_context',
         perf_counter() - final_context_started_at,
+        enabled=should_output,
     )
-    print(final_context)
+    if should_output:
+        print(final_context)
     _record_timing(
         timings,
         'create_context_for_repo_total',
         perf_counter() - total_started_at,
+        enabled=should_output,
     )
-    _print_timing_summary(timings)
+    _print_timing_summary(timings, enabled=should_output)
     return final_context
 
 
