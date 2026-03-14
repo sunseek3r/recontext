@@ -1,5 +1,5 @@
-from rag import similarity_search
-from utils.repos import get_repo_path
+from src.rag import similarity_search
+from src.utils.repos import get_repo_path
 
 # REPO_NAME = 'celery__kombu-0d3b1e254f9178828f62b7b84f0307882e28e2a0'
 REPO_NAME = 'pallets__werkzeug-7fd02ca598a29681f1c0b27377b9751f9c8f8ce0'

@@ -1,3 +1,3 @@
-from rag.vector_store import similarity_search
+from src.rag.vector_store import similarity_search
 
 __all__ = ["similarity_search"]

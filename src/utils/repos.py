@@ -1,5 +1,5 @@
 import os 
-import config as cfg
+import src.config as cfg
 
 def get_repo_path(repo_name: str) -> str:
     """
@@ -11,6 +11,5 @@ def get_repo_path(repo_name: str) -> str:
         cfg.REPOS_DIR_PATH,
         repo_name
     )
-
 
 

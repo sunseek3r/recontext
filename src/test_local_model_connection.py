@@ -2,7 +2,7 @@ import os
 
 from openai import OpenAI
 
-from rag.settings import get_embedding_api_key
+from src.rag.settings import get_embedding_api_key
 
 DEFAULT_TEST_INPUT = "connection test"
 

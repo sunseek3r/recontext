@@ -2,7 +2,7 @@ from functools import lru_cache
 
 from openai import OpenAI
 
-from llm.settings import get_llm_api_key, get_llm_base_url, get_llm_model
+from src.llm.settings import get_llm_api_key, get_llm_base_url, get_llm_model
 
 
 @lru_cache(maxsize=1)

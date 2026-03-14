@@ -3,7 +3,7 @@ import os
 
 from langchain_openai import OpenAIEmbeddings
 
-from rag.settings import get_embedding_api_key, get_embedding_model_preset
+from src.rag.settings import get_embedding_api_key, get_embedding_model_preset
 
 
 def get_openai_embeddings_config() -> dict[str, object]:

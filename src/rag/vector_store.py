@@ -5,9 +5,9 @@ from pathlib import Path
 from langchain_community.vectorstores import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from config import REPO_PATH
-from rag.embeddings import get_embedding_configuration_key, get_embeddings
-from rag.repository import load_code_repository
+from src.config import REPO_PATH
+from src.rag.embeddings import get_embedding_configuration_key, get_embeddings
+from src.rag.repository import load_code_repository
 
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 200

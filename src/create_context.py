@@ -1,9 +1,10 @@
 from typing import List
-from llm.client import complete_text
-from utils.repos import get_repo_path
-from utils.file_sampler import get_random_files
-import prompts.rag_queries as rq
-from rag.vector_store import similarity_search
+import src.prompts.rag_queries as rq
+
+from src.llm.client import complete_text
+from src.rag.vector_store import similarity_search
+from src.utils.file_sampler import get_random_files
+from src.utils.repos import get_repo_path
 
 def create_context_for_repo(
     repo_name: str,
@@ -77,9 +78,9 @@ DO NOT describe the logic of it.
     # ===== 3. ANALYZE PREFIX AND SUFFIX =====
 
     # ===== COMPOSE FINAL COMPLETION PROMPT =====
-    return compose_fim_completion_prompt(
-        language=cfg.
-    )
+    # return compose_fim_completion_prompt(
+    #     language=cfg.
+    # )
 
 
 def compose_fim_completion_prompt(
