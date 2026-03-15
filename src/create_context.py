@@ -131,9 +131,13 @@ async def create_context_for_repo(
                 print(snippet.render())
                 print("=" * 50)
 
+    effective_target_file_path = target_file_path
+    if effective_target_file_path is None and modified_file_snippets:
+        effective_target_file_path = modified_file_snippets[0].relative_path
+
     excluded_paths = {snippet.relative_path for snippet in modified_file_snippets}
-    if target_file_path is not None:
-        excluded_paths.add(target_file_path)
+    if effective_target_file_path is not None:
+        excluded_paths.add(effective_target_file_path)
 
     if use_regex:
         targeted_retrieval_started_at = perf_counter()
@@ -142,7 +146,7 @@ async def create_context_for_repo(
             repo_path,
             file_prefix=file_prefix,
             file_suffix=file_suffix,
-            target_file_path=target_file_path,
+            target_file_path=effective_target_file_path,
             exclude_relative_paths=excluded_paths,
             limit=8,
         )
@@ -448,10 +452,16 @@ def compose_fim_completion_prompt(
         key=lambda snippet: (snippet.score, snippet.relative_path, snippet.line_start or 0),
     )
     if ranked_auxiliary_snippets:
-        context_blocks.append(compose_context_snippets(ranked_auxiliary_snippets))
+        context_blocks.extend(
+            compose_context_snippets([snippet])
+            for snippet in ranked_auxiliary_snippets
+        )
 
     if modified_file_snippets:
-        context_blocks.append(compose_context_snippets(modified_file_snippets))
+        context_blocks.extend(
+            compose_context_snippets([snippet])
+            for snippet in modified_file_snippets
+        )
 
     return pack_context_blocks(context_blocks, max_context_chars=max_context_chars)
 

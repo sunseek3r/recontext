@@ -23,6 +23,7 @@ IMPORT_RE = re.compile(
     re.MULTILINE,
 )
 STRING_RE = re.compile(r"['\"]([A-Za-z_][A-Za-z0-9_./:-]{2,})['\"]")
+BLOCK_HEADER_RE = re.compile(r"^\s*(?:async\s+def|def|class)\s+")
 
 COMMON_TERMS = {
     "args",
@@ -337,6 +338,7 @@ def build_snippets_for_file(
     selected_ranges: list[tuple[int, int]] = []
     for line_number, score in sorted(line_scores.items(), key=lambda item: item[1], reverse=True):
         line_start, line_end = build_window(
+            lines=lines,
             line_number=line_number,
             total_lines=len(lines),
             window_size=DEFAULT_SNIPPET_LINE_LIMIT,
@@ -368,6 +370,7 @@ def build_snippets_for_file(
 
 def build_window(
     *,
+    lines: list[str],
     line_number: int,
     total_lines: int,
     window_size: int,
@@ -376,7 +379,52 @@ def build_window(
     line_start = max(line_number - lines_before, 1)
     line_end = min(line_start + window_size - 1, total_lines)
     line_start = max(line_end - window_size + 1, 1)
+
+    block_header_line = find_nearest_block_header(
+        lines=lines,
+        line_number=line_number,
+        lower_bound=line_start,
+    )
+    if block_header_line is not None:
+        line_start = block_header_line
+        line_end = min(line_start + window_size - 1, total_lines)
+
+    block_end_line = find_nearest_block_end(
+        lines=lines,
+        line_number=line_number,
+        upper_bound=min(total_lines, line_end + 6),
+    )
+    if block_end_line is not None:
+        line_end = max(line_number, block_end_line)
+        line_start = max(min(line_start, line_end - window_size + 1), 1)
+
     return line_start, line_end
+
+
+def find_nearest_block_header(
+    *,
+    lines: list[str],
+    line_number: int,
+    lower_bound: int,
+) -> int | None:
+    for current_line_number in range(line_number, lower_bound - 1, -1):
+        if BLOCK_HEADER_RE.match(lines[current_line_number - 1]):
+            return current_line_number
+
+    return None
+
+
+def find_nearest_block_end(
+    *,
+    lines: list[str],
+    line_number: int,
+    upper_bound: int,
+) -> int | None:
+    for current_line_number in range(line_number + 1, upper_bound + 1):
+        if not lines[current_line_number - 1].strip():
+            return current_line_number - 1
+
+    return None
 
 
 def overlaps_existing_range(
