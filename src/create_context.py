@@ -1,10 +1,13 @@
-from concurrent.futures import Future, ThreadPoolExecutor
+import asyncio
 from time import perf_counter
 from typing import Any, List, TypeVar
+
 import src.prompts.rag_queries as ragq
 import src.prompts.regex_queries as rq
 
-from src.llm.client import complete_text
+# IMPORT THE NEW ASYNC CLIENT
+from src.llm.client import complete_text_async
+
 from src.rag.vector_store import similarity_search
 from src.regex_search import regex_search
 from src.utils.context_files import compose_related_files_context, load_modified_file_examples
@@ -18,7 +21,6 @@ T = TypeVar('T')
 def _print_stage_break(*, enabled: bool) -> None:
     if not enabled:
         return
-
     print('=' * 50)
     print('=' * 50)
     print('=' * 50)
@@ -28,7 +30,6 @@ def _print_stage_break(*, enabled: bool) -> None:
 def _print_summary(summary: str, *, enabled: bool) -> None:
     if not enabled:
         return
-
     print(summary)
     print('=' * 50)
     print('=' * 50)
@@ -45,14 +46,12 @@ def _record_timing(
     timings.append((step_name, duration_seconds))
     if not enabled:
         return
-
     print(f'[timing] {step_name}: {duration_seconds:.3f}s')
 
 
 def _print_timing_summary(timings: list[tuple[str, float]], *, enabled: bool) -> None:
     if not enabled:
         return
-
     print('[timing] summary (slowest first):')
     for step_name, duration_seconds in sorted(
         timings,
@@ -62,13 +61,15 @@ def _print_timing_summary(timings: list[tuple[str, float]], *, enabled: bool) ->
         print(f'[timing] {step_name}: {duration_seconds:.3f}s')
 
 
-def _run_timed_step(step_name: str, fn: Any, *args: Any) -> tuple[T, str, float]:
+# NEW: Async wrapper for timing LLM network calls
+async def _run_timed_step_async(step_name: str, fn: Any, *args: Any) -> tuple[Any, str, float]:
     started_at = perf_counter()
-    result = fn(*args)
+    result = await fn(*args)
     return result, step_name, perf_counter() - started_at
 
 
-def create_context_for_repo(
+# NEW: Changed to async def to support non-blocking pipeline
+async def create_context_for_repo(
     repo_name: str,
     file_prefix: str,
     file_suffix: str,
@@ -87,13 +88,15 @@ def create_context_for_repo(
     should_output = verbose
 
     repo_path_started_at = perf_counter()
-    repo_path = get_repo_path(repo_name)
+    # NEW: Wrapping disk I/O in a thread so it doesn't block other files
+    repo_path = await asyncio.to_thread(get_repo_path, repo_name)
     _record_timing(
         timings,
         'resolve_repo_path',
         perf_counter() - repo_path_started_at,
         enabled=should_output,
     )
+    
     rag_samples = []
     seen_samples = set()
     regex_samples = []
@@ -104,36 +107,18 @@ def create_context_for_repo(
     if use_rag:
         rag_stage_started_at = perf_counter()
         get_rag_query_functions = [
-            {
-                'f': ragq.get_rag_query_class_example,
-                'samples_cnt': 1,
-                'id': 'class-example',
-            },
-            {
-                'f': ragq.get_rag_query_function_example,
-                'samples_cnt': 1,
-                'id': 'function-example',
-            },
-            {
-                'f': ragq.get_rag_query_naming_convention_example,
-                'samples_cnt': 1,
-                'id': 'naming-convention-example',
-            },
-            {
-                'f': ragq.get_rag_query_comment_example,
-                'samples_cnt': 1,
-                'id': 'comment-example',
-            },
-            {
-                'f': ragq.get_rag_query_env_var_access_example,
-                'samples_cnt': 1,
-                'id': 'env-var-access-example',
-            }
+            {'f': ragq.get_rag_query_class_example, 'samples_cnt': 1, 'id': 'class-example'},
+            {'f': ragq.get_rag_query_function_example, 'samples_cnt': 1, 'id': 'function-example'},
+            {'f': ragq.get_rag_query_naming_convention_example, 'samples_cnt': 1, 'id': 'naming-convention-example'},
+            {'f': ragq.get_rag_query_comment_example, 'samples_cnt': 1, 'id': 'comment-example'},
+            {'f': ragq.get_rag_query_env_var_access_example, 'samples_cnt': 1, 'id': 'env-var-access-example'}
         ]
 
         for entry in get_rag_query_functions:
             query_started_at = perf_counter()
-            samples = similarity_search(
+            # NEW: Pushing similarity search to background thread
+            samples = await asyncio.to_thread(
+                similarity_search,
                 query=entry['f'](),
                 repo_path=repo_path,
                 limit=entry['samples_cnt']
@@ -168,36 +153,18 @@ def create_context_for_repo(
     if use_regex:
         regex_stage_started_at = perf_counter()
         get_regex_functions = [
-            {
-                'f': rq.get_regex_query_class_example,
-                'samples_cnt': 1,
-                'id': 'regex-class-example',
-            },
-            {
-                'f': rq.get_regex_query_function_example,
-                'samples_cnt': 1,
-                'id': 'regex-function-example',
-            },
-            {
-                'f': rq.get_regex_query_naming_convention_example,
-                'samples_cnt': 1,
-                'id': 'regex-naming-convention-example',
-            },
-            {
-                'f': rq.get_regex_query_comment_example,
-                'samples_cnt': 1,
-                'id': 'regex-comment-example',
-            },
-            {
-                'f': rq.get_regex_query_env_var_access_example,
-                'samples_cnt': 1,
-                'id': 'regex-env-var-access-example',
-            },
+            {'f': rq.get_regex_query_class_example, 'samples_cnt': 1, 'id': 'regex-class-example'},
+            {'f': rq.get_regex_query_function_example, 'samples_cnt': 1, 'id': 'regex-function-example'},
+            {'f': rq.get_regex_query_naming_convention_example, 'samples_cnt': 1, 'id': 'regex-naming-convention-example'},
+            {'f': rq.get_regex_query_comment_example, 'samples_cnt': 1, 'id': 'regex-comment-example'},
+            {'f': rq.get_regex_query_env_var_access_example, 'samples_cnt': 1, 'id': 'regex-env-var-access-example'},
         ]
 
         for entry in get_regex_functions:
             pattern_started_at = perf_counter()
-            samples = regex_search(
+            # NEW: Pushing regex search to background thread
+            samples = await asyncio.to_thread(
+                regex_search,
                 pattern=entry['f'](),
                 repo_path=repo_path,
                 limit=entry['samples_cnt']
@@ -230,7 +197,9 @@ def create_context_for_repo(
 
     if use_random_files:
         random_files_started_at = perf_counter()
-        random_files_contents = get_random_files(
+        # NEW: Pushing file I/O to background thread
+        random_files_contents = await asyncio.to_thread(
+            get_random_files,
             num_files=3,
             extension='.py',
             project_root=repo_path
@@ -251,7 +220,9 @@ def create_context_for_repo(
 
     if use_modified_files and modified_files:
         modified_files_started_at = perf_counter()
-        modified_file_examples = load_modified_file_examples(
+        # NEW: Pushing file parsing to background thread
+        modified_file_examples = await asyncio.to_thread(
+            load_modified_file_examples,
             repo_path,
             modified_files,
             seen_samples,
@@ -284,11 +255,9 @@ You must be REALLY specific on describing code style in the project, with provid
     if summarize_prefix_suffix:
         prefix_suffix_summary_prompt = f"""
 You are given the beginning and the end of the file, with some relatively small part missing. You have to figure out and explain what is going in this file in details.
-```
 {file_prefix}
 ...
 {file_suffix}
-```
 """
     _record_timing(
         timings,
@@ -301,43 +270,41 @@ You are given the beginning and the end of the file, with some relatively small 
     prefix_suffix_summary = None
 
     llm_stage_started_at = perf_counter()
-    futures: dict[str, Future[tuple[str, str, float]]] = {}
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        if code_samples_summary_prompt is not None:
-            futures['code_samples_summary'] = executor.submit(
-                _run_timed_step,
+    
+    # NEW: Removed ThreadPoolExecutor. Using Native Asyncio Batching!
+    tasks = []
+    
+    if code_samples_summary_prompt is not None:
+        tasks.append(
+            _run_timed_step_async(
                 'llm:code_samples_summary',
-                complete_text,
+                complete_text_async,
                 code_samples_summary_prompt,
             )
+        )
 
-        if prefix_suffix_summary_prompt is not None:
-            futures['prefix_suffix_summary'] = executor.submit(
-                _run_timed_step,
+    if prefix_suffix_summary_prompt is not None:
+        tasks.append(
+            _run_timed_step_async(
                 'llm:prefix_suffix_summary',
-                complete_text,
+                complete_text_async,
                 prefix_suffix_summary_prompt,
             )
+        )
 
-        if 'code_samples_summary' in futures:
-            code_samples_summary, step_name, duration_seconds = futures['code_samples_summary'].result()
-            _record_timing(
-                timings,
-                step_name,
-                duration_seconds,
-                enabled=should_output,
-            )
-            _print_summary(code_samples_summary, enabled=should_output)
+    if tasks:
+        # Blast them to vLLM concurrently!
+        results = await asyncio.gather(*tasks)
+        
+        for result, step_name, duration_seconds in results:
+            _record_timing(timings, step_name, duration_seconds, enabled=should_output)
+            _print_summary(result, enabled=should_output)
+            
+            if step_name == 'llm:code_samples_summary':
+                code_samples_summary = result
+            elif step_name == 'llm:prefix_suffix_summary':
+                prefix_suffix_summary = result
 
-        if 'prefix_suffix_summary' in futures:
-            prefix_suffix_summary, step_name, duration_seconds = futures['prefix_suffix_summary'].result()
-            _record_timing(
-                timings,
-                step_name,
-                duration_seconds,
-                enabled=should_output,
-            )
-            _print_summary(prefix_suffix_summary, enabled=should_output)
     _record_timing(
         timings,
         'llm_total_wall_time',
@@ -368,6 +335,7 @@ You are given the beginning and the end of the file, with some relatively small 
         enabled=should_output,
     )
     _print_timing_summary(timings, enabled=should_output)
+    
     return final_context
 
 
@@ -410,7 +378,6 @@ Here are code that may be potentially related to the file you are working with:
 Your task is to create fill-in-the-middle completion for the given prefix and suffix of the file.
 Your completion must complete the logic of missed piece of code and follow patterns, principles and rules established in the codebase.
 """
-
 
     return f"""
 {intro_part}
