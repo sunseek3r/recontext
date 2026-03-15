@@ -1,10 +1,14 @@
 import os 
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 # ========= TO CHANGE =========
 
 LANGUAGE = 'python' # 'python' | 'kotlin'
-STAGE = 'public'
+STAGE = os.environ.get('STAGE', 'public')
 CUR_REPO_NAME = 'celery__kombu-0d3b1e254f9178828f62b7b84f0307882e28e2a0'
 
 # ========= TO CHANGE =========

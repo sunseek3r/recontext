@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from concurrent.futures import Future, ThreadPoolExecutor
+import asyncio
 from time import perf_counter
 from typing import Any, TypeVar
 
 import src.prompts.rag_queries as ragq
 import src.prompts.regex_queries as rq
-from src.llm.client import complete_text
+from src.llm.client import complete_text_async
 from src.rag.vector_store import similarity_search
 from src.regex_search import regex_search
 from src.utils.context_files import load_modified_file_examples
@@ -71,13 +71,13 @@ def _print_timing_summary(timings: list[tuple[str, float]], *, enabled: bool) ->
         print(f"[timing] {step_name}: {duration_seconds:.3f}s")
 
 
-def _run_timed_step(step_name: str, fn: Any, *args: Any) -> tuple[T, str, float]:
+async def _run_timed_step_async(step_name: str, fn: Any, *args: Any) -> tuple[T, str, float]:
     started_at = perf_counter()
-    result = fn(*args)
+    result = await fn(*args)
     return result, step_name, perf_counter() - started_at
 
 
-def create_context_for_repo(
+async def create_context_for_repo(
     repo_name: str,
     file_prefix: str,
     file_suffix: str,
@@ -98,7 +98,7 @@ def create_context_for_repo(
     should_output = verbose
 
     repo_path_started_at = perf_counter()
-    repo_path = get_repo_path(repo_name)
+    repo_path = await asyncio.to_thread(get_repo_path, repo_name)
     _record_timing(
         timings,
         "resolve_repo_path",
@@ -113,7 +113,8 @@ def create_context_for_repo(
 
     if use_modified_files and modified_files:
         modified_files_started_at = perf_counter()
-        modified_file_snippets = load_modified_file_examples(
+        modified_file_snippets = await asyncio.to_thread(
+            load_modified_file_examples,
             repo_path,
             modified_files,
             seen_samples,
@@ -130,16 +131,14 @@ def create_context_for_repo(
                 print(snippet.render())
                 print("=" * 50)
 
-    excluded_paths = {
-        snippet.relative_path
-        for snippet in modified_file_snippets
-    }
+    excluded_paths = {snippet.relative_path for snippet in modified_file_snippets}
     if target_file_path is not None:
         excluded_paths.add(target_file_path)
 
     if use_regex:
         targeted_retrieval_started_at = perf_counter()
-        targeted_snippets = collect_targeted_snippets(
+        targeted_snippets = await asyncio.to_thread(
+            collect_targeted_snippets,
             repo_path,
             file_prefix=file_prefix,
             file_suffix=file_suffix,
@@ -165,7 +164,11 @@ def create_context_for_repo(
                 print("=" * 50)
 
         regex_stage_started_at = perf_counter()
-        regex_documents = collect_regex_documents(repo_path=repo_path, enabled=use_regex)
+        regex_documents = await asyncio.to_thread(
+            collect_regex_documents,
+            repo_path,
+            enabled=use_regex,
+        )
         regex_snippets = [
             document_to_snippet(document, score=1, kind="regex")
             for document in regex_documents
@@ -191,7 +194,7 @@ def create_context_for_repo(
 
     if use_rag:
         rag_stage_started_at = perf_counter()
-        rag_documents = collect_rag_documents(repo_path=repo_path)
+        rag_documents = await asyncio.to_thread(collect_rag_documents, repo_path)
         rag_snippets = [
             document_to_snippet(document, score=2, kind="rag")
             for document in rag_documents
@@ -217,7 +220,8 @@ def create_context_for_repo(
 
     if use_random_files:
         random_files_started_at = perf_counter()
-        random_files_contents = get_random_files(
+        random_files_contents = await asyncio.to_thread(
+            get_random_files,
             num_files=3,
             extension=".py",
             project_root=repo_path,
@@ -257,43 +261,45 @@ def create_context_for_repo(
     prefix_suffix_summary = None
 
     llm_stage_started_at = perf_counter()
-    futures: dict[str, Future[tuple[str, str, float]]] = {}
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        if code_samples_summary_prompt is not None:
-            futures["code_samples_summary"] = executor.submit(
-                _run_timed_step,
+    llm_tasks: dict[str, asyncio.Task[tuple[str, str, float]]] = {}
+    if code_samples_summary_prompt is not None:
+        llm_tasks["code_samples_summary"] = asyncio.create_task(
+            _run_timed_step_async(
                 "llm:code_samples_summary",
-                complete_text,
+                complete_text_async,
                 code_samples_summary_prompt,
             )
+        )
 
-        if prefix_suffix_summary_prompt is not None:
-            futures["prefix_suffix_summary"] = executor.submit(
-                _run_timed_step,
+    if prefix_suffix_summary_prompt is not None:
+        llm_tasks["prefix_suffix_summary"] = asyncio.create_task(
+            _run_timed_step_async(
                 "llm:prefix_suffix_summary",
-                complete_text,
+                complete_text_async,
                 prefix_suffix_summary_prompt,
             )
+        )
 
-        if "code_samples_summary" in futures:
-            code_samples_summary, step_name, duration_seconds = futures["code_samples_summary"].result()
-            _record_timing(
-                timings,
-                step_name,
-                duration_seconds,
-                enabled=should_output,
-            )
-            _print_summary(code_samples_summary, enabled=should_output)
+    if "code_samples_summary" in llm_tasks:
+        code_samples_summary, step_name, duration_seconds = await llm_tasks["code_samples_summary"]
+        _record_timing(
+            timings,
+            step_name,
+            duration_seconds,
+            enabled=should_output,
+        )
+        _print_summary(code_samples_summary, enabled=should_output)
 
-        if "prefix_suffix_summary" in futures:
-            prefix_suffix_summary, step_name, duration_seconds = futures["prefix_suffix_summary"].result()
-            _record_timing(
-                timings,
-                step_name,
-                duration_seconds,
-                enabled=should_output,
-            )
-            _print_summary(prefix_suffix_summary, enabled=should_output)
+    if "prefix_suffix_summary" in llm_tasks:
+        prefix_suffix_summary, step_name, duration_seconds = await llm_tasks["prefix_suffix_summary"]
+        _record_timing(
+            timings,
+            step_name,
+            duration_seconds,
+            enabled=should_output,
+        )
+        _print_summary(prefix_suffix_summary, enabled=should_output)
+
     _record_timing(
         timings,
         "llm_total_wall_time",
@@ -331,26 +337,11 @@ def collect_rag_documents(repo_path: str) -> list[Any]:
     rag_documents: list[Any] = []
     seen_contents: set[str] = set()
     get_rag_query_functions = [
-        {
-            "f": ragq.get_rag_query_class_example,
-            "samples_cnt": 1,
-        },
-        {
-            "f": ragq.get_rag_query_function_example,
-            "samples_cnt": 1,
-        },
-        {
-            "f": ragq.get_rag_query_naming_convention_example,
-            "samples_cnt": 1,
-        },
-        {
-            "f": ragq.get_rag_query_comment_example,
-            "samples_cnt": 1,
-        },
-        {
-            "f": ragq.get_rag_query_env_var_access_example,
-            "samples_cnt": 1,
-        },
+        {"f": ragq.get_rag_query_class_example, "samples_cnt": 1},
+        {"f": ragq.get_rag_query_function_example, "samples_cnt": 1},
+        {"f": ragq.get_rag_query_naming_convention_example, "samples_cnt": 1},
+        {"f": ragq.get_rag_query_comment_example, "samples_cnt": 1},
+        {"f": ragq.get_rag_query_env_var_access_example, "samples_cnt": 1},
     ]
 
     for entry in get_rag_query_functions:
