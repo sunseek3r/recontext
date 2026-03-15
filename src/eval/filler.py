@@ -25,7 +25,7 @@ def truncate_context_from_left(context_str: str, limit: int = CONTEXT_LENGTH_LIM
     return context_str[-limit:]
 
 
-def complete_middle(prefix, suffix, context_str):
+def complete_middle(prefix, suffix, context_str, file_path):
     """
     Placeholder for a call to an LLM to complete the middle.
     """
@@ -36,8 +36,8 @@ def complete_middle(prefix, suffix, context_str):
 
 
     full_prompt = (
-        f"<|fim_prefix|>{context_str}\n"
-        f"// Current file:\n"
+        f"<|fim_prefix|>{context_str}"
+        f"<|file_sep|>{file_path}\n"
         f"{prefix}<|fim_suffix|>{suffix}<|fim_middle|>"
     )
 
@@ -47,7 +47,7 @@ def complete_middle(prefix, suffix, context_str):
         max_tokens=512,    # completions are usually short
         temperature=0.0,   # stay precise for coding
         # Stop tokens prevent the model from continuing into the suffix code
-        stop=["<|file_separator|>", "<|endoftext|>", "\n\n"]
+        stop=["<|file_sep|>", "<|endoftext|>", "\n\n"]
     )
 
     return response.choices[0].text
@@ -112,6 +112,7 @@ def evaluate_filler(file_path, answers_path):
 
                 file_prefix = data['prefix']
                 file_suffix = data['suffix']
+                file_path = data['path']
                 modified_files = data.get('modified')
 
 
@@ -119,17 +120,20 @@ def evaluate_filler(file_path, answers_path):
                     repo_name,
                     file_prefix,
                     file_suffix,
+                    target_file_path=file_path,
                     use_rag=False,
                     use_modified_files=True,
-                    summarize_code_samples=True,
+                    summarize_code_samples=False,
                     summarize_prefix_suffix=False,
+                    use_random_files=False,
                     modified_files=modified_files,
+                    max_context_chars=CONTEXT_LENGTH_LIMIT,
                 )
                 context_str = truncate_context_from_left(context_str)
                 # data['context'] = context_str
 
 
-                middle = complete_middle(file_prefix, file_suffix, context_str)
+                middle = complete_middle(file_prefix, file_suffix, context_str, file_path)
 
                 pred_file.write(json.dumps({'middle': middle}) + '\n')
                 res_file.write(json.dumps({"context": context_str}) + '\n')

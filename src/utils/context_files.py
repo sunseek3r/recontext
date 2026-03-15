@@ -1,18 +1,17 @@
 from pathlib import Path
 
 from src.rag.repository import read_text_file
-
-FILE_SEPARATOR = "<|file_sep|>"
+from src.utils.context_snippets import ContextSnippet, compose_context_snippets
 
 
 def load_modified_file_examples(
     repo_path: str,
     modified_files: list[str],
     seen_samples: set[str],
-) -> list[str]:
+) -> list[ContextSnippet]:
     repository_root = Path(repo_path).resolve()
     seen_paths: set[Path] = set()
-    modified_file_examples: list[str] = []
+    modified_file_examples: list[ContextSnippet] = []
 
     for relative_path in modified_files:
         file_path = (repository_root / relative_path).resolve()
@@ -35,17 +34,19 @@ def load_modified_file_examples(
             continue
 
         seen_samples.add(content)
-        modified_file_examples.append(f"{relative_path}\n{content}")
+        modified_file_examples.append(
+            ContextSnippet(
+                relative_path=relative_path,
+                content=content,
+                score=10_000,
+                kind="modified",
+            )
+        )
 
     return modified_file_examples
 
 
 def compose_related_files_context(
-    file_examples: list[str],
-    *,
-    file_separator: str = FILE_SEPARATOR,
+    file_examples: list[ContextSnippet],
 ) -> str:
-    if not file_examples:
-        return ""
-
-    return "".join(f"{file_separator}{file_example}" for file_example in file_examples)
+    return compose_context_snippets(file_examples)
